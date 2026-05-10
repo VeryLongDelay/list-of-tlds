@@ -108,25 +108,32 @@
 
       .grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 140px), 1fr));
         gap: 0.5rem;
       }
 
       .tld {
         min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        overflow-wrap: anywhere;
+        word-break: break-word;
 
         padding: 0.65rem 0.75rem;
         border: 1px solid color-mix(in srgb, CanvasText 15%, transparent);
         border-radius: 0.65rem;
 
         text-align: center;
-        white-space: nowrap;
 
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        line-height: 1.35;
 
         background: color-mix(in srgb, CanvasText 5%, transparent);
+      }
+
+      .tld-unicode {
+        display: block;
+        margin-top: 0.25rem;
+        font-size: 0.85rem;
+        opacity: 0.72;
       }
 
       footer {
@@ -223,19 +230,17 @@
         setKeycapPressed(kKeycap, false);
       }
 
-      function focusSearch(event) {
+      function focusSearch(event, options = {}) {
         event.preventDefault();
-
-        clearPressedKeycaps();
 
         if (document.activeElement !== searchInput) {
           searchInput.focus({ preventScroll: true });
           searchInput.select();
         }
 
-        requestAnimationFrame(() => {
+        window.setTimeout(() => {
           clearPressedKeycaps();
-        });
+        }, options.clearDelay ?? 120);
       }
 
       function onShortcutKeyDown(event) {
@@ -295,7 +300,14 @@
           }
 
           if (key === "k" && event[platformModifier]) {
-            focusSearch(event);
+            setKeycapPressed(modifierKeycap, true);
+            setKeycapPressed(kKeycap, true);
+
+            event.preventDefault();
+
+            requestAnimationFrame(() => {
+              focusSearch(event);
+            });
           }
         }
 
@@ -336,6 +348,114 @@
         throw new Error("Failed to load tlds.min.json or tlds.json");
       }
 
+      function decodePunycode(input) {
+        const base = 36;
+        const tMin = 1;
+        const tMax = 26;
+        const skew = 38;
+        const damp = 700;
+        const initialBias = 72;
+        const initialN = 128;
+        const delimiter = "-";
+
+        function adapt(delta, numPoints, firstTime) {
+          delta = firstTime ? Math.floor(delta / damp) : delta >> 1;
+          delta += Math.floor(delta / numPoints);
+
+          let k = 0;
+
+          while (delta > ((base - tMin) * tMax) >> 1) {
+            delta = Math.floor(delta / (base - tMin));
+            k += base;
+          }
+
+          return k + Math.floor(((base - tMin + 1) * delta) / (delta + skew));
+        }
+
+        function decodeDigit(codePoint) {
+          if (codePoint >= 48 && codePoint <= 57) {
+            return 26 + codePoint - 48;
+          }
+
+          if (codePoint >= 65 && codePoint <= 90) {
+            return codePoint - 65;
+          }
+
+          if (codePoint >= 97 && codePoint <= 122) {
+            return codePoint - 97;
+          }
+
+          return base;
+        }
+
+        const output = [];
+        let n = initialN;
+        let i = 0;
+        let bias = initialBias;
+
+        const basic = input.lastIndexOf(delimiter);
+
+        if (basic > -1) {
+          for (let j = 0; j < basic; j += 1) {
+            output.push(input.charCodeAt(j));
+          }
+        }
+
+        let index = basic > -1 ? basic + 1 : 0;
+
+        while (index < input.length) {
+          const oldI = i;
+          let w = 1;
+
+          for (let k = base; ; k += base) {
+            if (index >= input.length) {
+              throw new Error("Invalid punycode input");
+            }
+
+            const digit = decodeDigit(input.charCodeAt(index));
+            index += 1;
+            i += digit * w;
+
+            const t = k <= bias ? tMin : k >= bias + tMax ? tMax : k - bias;
+
+            if (digit < t) {
+              break;
+            }
+
+            w *= base - t;
+          }
+
+          const outLength = output.length + 1;
+
+          bias = adapt(i - oldI, outLength, oldI === 0);
+          n += Math.floor(i / outLength);
+          i %= outLength;
+
+          output.splice(i, 0, n);
+          i += 1;
+        }
+
+        return String.fromCodePoint(...output);
+      }
+
+      function decodeIdnTld(tld) {
+        if (!tld.startsWith("xn--")) {
+          return null;
+        }
+
+        try {
+          const unicode = decodePunycode(tld.slice(4));
+
+          if (!unicode || unicode === tld) {
+            return null;
+          }
+
+          return unicode;
+        } catch {
+          return null;
+        }
+      }
+
       function render() {
         const query = normalizeQuery(searchInput.value);
 
@@ -348,7 +468,20 @@
         for (const tld of matches) {
           const item = document.createElement("div");
           item.className = "tld";
-          item.textContent = `.${tld}`;
+
+          const ascii = document.createElement("span");
+          ascii.textContent = `.${tld}`;
+          item.appendChild(ascii);
+
+          const unicode = decodeIdnTld(tld);
+
+          if (unicode) {
+            const rendered = document.createElement("span");
+            rendered.className = "tld-unicode";
+            rendered.textContent = `.${unicode}`;
+            item.appendChild(rendered);
+          }
+
           results.appendChild(item);
         }
       }
@@ -368,7 +501,9 @@
       window.addEventListener("pagehide", cleanupSearchShortcut, { once: true });
 
       searchInput.addEventListener("focus", () => {
-        clearPressedKeycaps();
+        window.setTimeout(() => {
+          clearPressedKeycaps();
+        }, 140);
       });
 
       searchInput.addEventListener("input", render);
