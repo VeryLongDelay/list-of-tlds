@@ -6,7 +6,11 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - main
+      - master
+    paths:
+      - "public/index.html"
+      - "scripts/update_tlds.py"
+      - ".github/workflows/update-tlds.yml"
 
 permissions:
   contents: write
@@ -22,20 +26,23 @@ jobs:
     runs-on: ubuntu-latest
 
     outputs:
-      changed: ${{ steps.diff.outputs.changed }}
+      data_changed: ${{ steps.data_diff.outputs.changed }}
+      should_deploy: ${{ steps.deploy_check.outputs.should_deploy }}
 
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout
+        uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v6
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.13"
 
       - name: Update TLD list
         run: python scripts/update_tlds.py
 
-      - name: Check for changes
-        id: diff
+      - name: Check for TLD data changes
+        id: data_diff
         run: |
           if git diff --quiet -- \
             public/tlds.txt \
@@ -48,7 +55,7 @@ jobs:
           fi
 
       - name: Commit updated TLD files
-        if: steps.diff.outputs.changed == 'true'
+        if: steps.data_diff.outputs.changed == 'true'
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "Update TLD list"
@@ -58,9 +65,18 @@ jobs:
             public/tlds.min.json
             public/tlds.sha256
 
+      - name: Decide whether to deploy
+        id: deploy_check
+        run: |
+          if [[ "${{ steps.data_diff.outputs.changed }}" == "true" || "${{ github.event_name }}" == "push" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_deploy=false" >> "$GITHUB_OUTPUT"
+          fi
+
   deploy:
     needs: update
-    if: needs.update.outputs.changed == 'true'
+    if: needs.update.outputs.should_deploy == 'true'
     runs-on: ubuntu-latest
 
     environment:
@@ -68,9 +84,18 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.ref_name }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Ensure TLD files exist
+        run: python scripts/update_tlds.py
 
       - name: Setup Pages
         uses: actions/configure-pages@v6
