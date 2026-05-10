@@ -1,4 +1,4 @@
-name: Update and publish TLD list
+name: Update TLD list
 
 on:
   schedule:
