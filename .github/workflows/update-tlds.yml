@@ -56,14 +56,18 @@ jobs:
 
       - name: Commit updated TLD files
         if: steps.data_diff.outputs.changed == 'true'
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "Update TLD list"
-          file_pattern: |
-            public/tlds.txt
-            public/tlds.json
-            public/tlds.min.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add \
+            public/tlds.txt \
+            public/tlds.json \
+            public/tlds.min.json \
             public/tlds.sha256
+
+          git commit -m "Update TLD list"
+          git push
 
       - name: Decide whether to deploy
         id: deploy_check
