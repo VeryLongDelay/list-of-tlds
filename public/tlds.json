@@ -1,7 +1,8 @@
 {
     "source": "https://data.iana.org/TLD/tlds-alpha-by-domain.txt",
-    "updated_at": "2026-05-10T20:55:31.677355+00:00",
+    "updated_at": "2026-05-10T21:38:52.619993+00:00",
     "count": 1437,
+    "checksum_sha256": "15bf760f9fe61ea8b7afa63a1f6538f7b5c710f41c594f5daa37b7e048d24499",
     "tlds": [
         "aaa",
         "aarp",
