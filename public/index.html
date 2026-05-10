@@ -37,6 +37,18 @@
         margin-bottom: 1.5rem;
       }
 
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+        border: 0;
+      }
+
       .search-shell {
         position: relative;
         display: flex;
@@ -107,18 +119,6 @@
         text-align: center;
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         background: color-mix(in srgb, CanvasText 5%, transparent);
-      }
-
-      .sr-only {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-        border: 0;
       }
 
       footer {
@@ -197,24 +197,6 @@
         return value.trim().toLowerCase().replace(/^\./, "");
       }
 
-      async function loadTldData() {
-        const paths = ["./tlds.min.json", "./tlds.json"];
-
-        for (const path of paths) {
-          try {
-            const response = await fetch(path);
-
-            if (response.ok) {
-              return await response.json();
-            }
-          } catch {
-            // Try the next path.
-          }
-        }
-
-        throw new Error("Failed to load tlds.min.json or tlds.json");
-      }
-
       function isEditableTarget(target) {
         if (!(target instanceof HTMLElement)) {
           return false;
@@ -223,10 +205,14 @@
         return Boolean(target.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']"));
       }
 
+      function setKeycapPressed(keycap, isPressed) {
+        keycap.classList.toggle("is-pressed", isPressed);
+      }
+
       function clearPressedKeycaps() {
-        slashKeycap.classList.remove("is-pressed");
-        modifierKeycap.classList.remove("is-pressed");
-        kKeycap.classList.remove("is-pressed");
+        setKeycapPressed(slashKeycap, false);
+        setKeycapPressed(modifierKeycap, false);
+        setKeycapPressed(kKeycap, false);
       }
 
       function focusSearch(event) {
@@ -244,6 +230,39 @@
         });
       }
 
+      function onShortcutKeyDown(event) {
+        const key = event.key.toLowerCase();
+
+        if (event.key === "/") {
+          setKeycapPressed(slashKeycap, true);
+        }
+
+        if (event.metaKey || event.ctrlKey) {
+          setKeycapPressed(modifierKeycap, true);
+        }
+
+        if (key === "k") {
+          setKeycapPressed(kKeycap, true);
+        }
+      }
+
+      function onShortcutKeyUp(event) {
+        const key = event.key.toLowerCase();
+
+        if (event.key === "/") {
+          setKeycapPressed(slashKeycap, false);
+        }
+
+        if (event.key === "Meta" || event.key === "Control") {
+          setKeycapPressed(modifierKeycap, false);
+          setKeycapPressed(kKeycap, false);
+        }
+
+        if (key === "k") {
+          setKeycapPressed(kKeycap, false);
+        }
+      }
+
       function createSearchShortcutHandler(input) {
         function onKeyDown(event) {
           const key = event.key.toLowerCase();
@@ -254,27 +273,26 @@
             return;
           }
 
+          if (!isEditableTarget(event.target)) {
+            onShortcutKeyDown(event);
+          }
+
           if (isEditableTarget(event.target)) {
             return;
           }
 
           if (event.key === "/") {
-            slashKeycap.classList.add("is-pressed");
             focusSearch(event);
             return;
           }
 
           if (key === "k" && event[platformModifier]) {
-            modifierKeycap.classList.add("is-pressed");
-            kKeycap.classList.add("is-pressed");
             focusSearch(event);
           }
         }
 
         function onKeyUp(event) {
-          if (event.key === "/" || event.key.toLowerCase() === "k" || event.key === "Meta" || event.key === "Control") {
-            clearPressedKeycaps();
-          }
+          onShortcutKeyUp(event);
         }
 
         function onBlur() {
@@ -292,9 +310,23 @@
         };
       }
 
-      const cleanupSearchShortcut = createSearchShortcutHandler(searchInput);
+      async function loadTldData() {
+        const paths = ["./tlds.min.json", "./tlds.json"];
 
-      window.addEventListener("pagehide", cleanupSearchShortcut, { once: true });
+        for (const path of paths) {
+          try {
+            const response = await fetch(path);
+
+            if (response.ok) {
+              return await response.json();
+            }
+          } catch {
+            // Try the next path.
+          }
+        }
+
+        throw new Error("Failed to load tlds.min.json or tlds.json");
+      }
 
       function render() {
         const query = normalizeQuery(searchInput.value);
@@ -323,11 +355,15 @@
         render();
       }
 
-      searchInput.addEventListener("input", render);
+      const cleanupSearchShortcut = createSearchShortcutHandler(searchInput);
+
+      window.addEventListener("pagehide", cleanupSearchShortcut, { once: true });
 
       searchInput.addEventListener("focus", () => {
         clearPressedKeycaps();
       });
+
+      searchInput.addEventListener("input", render);
 
       init().catch((error) => {
         meta.textContent = error.message;
