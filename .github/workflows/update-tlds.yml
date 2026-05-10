@@ -1,0 +1,64 @@
+name: Update and publish TLD list
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Update TLD list
+        run: python scripts/update_tlds.py
+
+      - name: Commit updated TLD files
+        uses: stefanzweifel/git-auto-commit-action@v7.1.0
+        with:
+          commit_message: "Update TLD list"
+          file_pattern: public/tlds.txt public/tlds.json public/tlds.min.json
+
+  deploy:
+    needs: update
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Update TLD list
+        run: python scripts/update_tlds.py
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: public
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
