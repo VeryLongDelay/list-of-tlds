@@ -113,11 +113,19 @@
       }
 
       .tld {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+
         padding: 0.65rem 0.75rem;
         border: 1px solid color-mix(in srgb, CanvasText 15%, transparent);
         border-radius: 0.65rem;
+
         text-align: center;
+        white-space: nowrap;
+
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
         background: color-mix(in srgb, CanvasText 5%, transparent);
       }
 
