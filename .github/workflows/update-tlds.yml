@@ -21,6 +21,9 @@ jobs:
   update:
     runs-on: ubuntu-latest
 
+    outputs:
+      changed: ${{ steps.diff.outputs.changed }}
+
     steps:
       - uses: actions/checkout@v6
 
@@ -31,14 +34,33 @@ jobs:
       - name: Update TLD list
         run: python scripts/update_tlds.py
 
+      - name: Check for changes
+        id: diff
+        run: |
+          if git diff --quiet -- \
+            public/tlds.txt \
+            public/tlds.json \
+            public/tlds.min.json \
+            public/tlds.sha256; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Commit updated TLD files
-        uses: stefanzweifel/git-auto-commit-action@v7.1.0
+        if: steps.diff.outputs.changed == 'true'
+        uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "Update TLD list"
-          file_pattern: public/tlds.txt public/tlds.json public/tlds.min.json
+          file_pattern: |
+            public/tlds.txt
+            public/tlds.json
+            public/tlds.min.json
+            public/tlds.sha256
 
   deploy:
     needs: update
+    if: needs.update.outputs.changed == 'true'
     runs-on: ubuntu-latest
 
     environment:
@@ -47,9 +69,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-
-      - name: Update TLD list
-        run: python scripts/update_tlds.py
+        with:
+          ref: ${{ github.ref_name }}
 
       - name: Setup Pages
         uses: actions/configure-pages@v6
